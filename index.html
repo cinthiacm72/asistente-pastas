@@ -7,21 +7,16 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <img src="https://www.shutterstock.com/image-vector/silhouette-monochrome-dish-hot-spaghetti-260nw-520318474.jpg" alt="Logo Marca" class="logo" />
-  <h1>Asistente de Pastas</h1>
-  <p>Haz tu pregunta por voz</p>
-  <button onclick="startRecognition()">🎤 Hablar</button>
-  <p id="userInput"></p>
-  <p id="respuestaIA"></p>
-
-  <h2>Habla con nuestro asistente de pastas</h2>
-
-  <iframe
-    allow="microphone;"
-    width="350"
-    height="430"
-    src="https://console.dialogflow.com/api-client/demo/embedded/6e482c14-3aa0-414f-8257-4bfcd60afdff">
-</iframe>
+  
+  <div class="container">
+    <img src="https://www.shutterstock.com/image-vector/silhouette-monochrome-dish-hot-spaghetti-260nw-520318474.jpg" alt="Logo de Asistente Pastas" class="logo" />
+    <h1>Asistente de Pastas Italianas</h1>
+    <p>Presiona el botón y háblame. Por ejemplo: <em>"¿Qué productos ofrecen?"</em> o <em>"Sugiéreme una receta con fettuccine."</em></p>
+    
+    <button id="hablarBtn">🎤 Hablar</button>
+    
+    <div class="respuesta" id="respuesta"></div>
+  </div>
 
   <script src="main.js"></script>
 </body>
