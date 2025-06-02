@@ -1,0 +1,19 @@
+body {
+  font-family: sans-serif;
+  text-align: center;
+  background-color: #fff7f0;
+}
+.logo {
+  max-width: 200px;
+  margin-top: 20px;
+}
+button {
+  padding: 1em;
+  font-size: 1.2em;
+  margin-top: 2em;
+  background-color: #ff7043;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
