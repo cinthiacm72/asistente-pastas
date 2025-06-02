@@ -16,7 +16,4 @@ const startRecognition = () => {
   };
 };
 
-async function obtenerRespuesta(texto) {
-  // Aquí conectaremos con Dialogflow en los próximos pasos
-  return "Estoy procesando tu pregunta sobre pastas..."; // temporal
 }
