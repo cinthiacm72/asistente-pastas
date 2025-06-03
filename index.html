@@ -3,105 +3,72 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Asistente Voz Pasta - Wit.ai Vanilla (iOS compatible)</title>
+<title>Asistente de Voz - Pastas (Wit.ai audio)</title>
 <style>
-  body { font-family: Arial, sans-serif; padding: 2rem; max-width: 600px; margin: auto; }
-  button { font-size: 1.2rem; padding: 0.7rem 1.5rem; }
-  #status { margin-top: 1rem; font-weight: bold; white-space: pre-wrap; }
-  #response { margin-top: 1rem; white-space: pre-wrap; }
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 1rem; }
+  button { font-size: 1.2rem; padding: 0.8rem 1.5rem; cursor: pointer; }
+  #status { margin-top: 1rem; font-weight: bold; min-height: 1.5em; }
+  #response { white-space: pre-wrap; margin-top: 1rem; background: #f4f4f4; padding: 1rem; border-radius: 5px; min-height: 80px;}
 </style>
 </head>
 <body>
 
 <h1>Asistente de Voz - Pastas</h1>
-<button id="startBtn">Iniciar conversación</button>
-
-<div id="status">Presiona "Iniciar conversación" para comenzar</div>
+<button id="btnRecord">🎤 Grabar voz</button>
+<div id="status">Presiona "Grabar voz" para comenzar.</div>
 <div id="response"></div>
 
 <script>
-
-  if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-  console.log("SpeechRecognition disponible");
-} else {
-  console.log("SpeechRecognition NO disponible, solo grabación audio");
-}
-
-  
 (() => {
-  const WIT_TOKEN = '72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK'; // Tu token Wit.ai
+  const WIT_TOKEN = '72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK'; // Pon aquí tu token real (sin espacios)
 
-  const startBtn = document.getElementById('startBtn');
+  const btnRecord = document.getElementById('btnRecord');
   const statusEl = document.getElementById('status');
   const responseEl = document.getElementById('response');
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const isSpeechRecSupported = !!SpeechRecognition;
-
-  let recognition;
-  let isListening = false;
-
   let mediaRecorder;
-  let chunks = [];
+  let audioChunks = [];
 
-  // Función para enviar texto a Wit.ai
-  async function sendTextToWit(text) {
-    statusEl.textContent = 'Enviando texto a Wit.ai...';
-    const url = `https://api.wit.ai/message?v=20230606&q=${encodeURIComponent(text)}`;
-    try {
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${WIT_TOKEN}`
-        }
-      });
-      if (!res.ok) {
-        statusEl.textContent = 'Error al conectar con Wit.ai';
-        return null;
-      }
-      const data = await res.json();
-      return data;
-    } catch (e) {
-      statusEl.textContent = 'Error en la petición a Wit.ai';
-      return null;
+  // Función para reproducir texto (Text to Speech)
+  function speak(text) {
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.speak(utterance);
     }
   }
 
-  // Función para enviar audio a Wit.ai (para iOS)
-  async function sendAudioToWit(blob) {
+  // Función para enviar audio a Wit.ai
+  async function sendAudioToWit(audioBlob) {
     statusEl.textContent = 'Enviando audio a Wit.ai...';
 
     try {
-      const arrayBuffer = await blob.arrayBuffer();
       const res = await fetch('https://api.wit.ai/speech?v=20230606', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${WIT_TOKEN}`,
-          'Content-Type': blob.type
+          'Content-Type': 'audio/webm'
         },
-        body: arrayBuffer
+        body: audioBlob
       });
+
       if (!res.ok) {
-        statusEl.textContent = `Error al enviar audio a Wit.ai (status ${res.status})`;
+        statusEl.textContent = `Error Wit.ai: ${res.status} ${res.statusText}`;
         return null;
       }
+
       const data = await res.json();
       return data;
+
     } catch (e) {
-      statusEl.textContent = 'Error en la petición de audio a Wit.ai';
+      statusEl.textContent = 'Error enviando audio a Wit.ai';
+      console.error(e);
       return null;
     }
   }
 
-  // Función para hablar (Text to Speech)
-  function speak(text) {
-    if (!('speechSynthesis' in window)) return;
-    const utterance = new SpeechSynthesisUtterance(text);
-    window.speechSynthesis.speak(utterance);
-  }
-
-  // Función para manejar respuesta de Wit.ai
+  // Función para procesar respuesta de Wit.ai y responder
   function handleWitResponse(data) {
-    console.log('Wit.ai response:', data);
+    if (!data) return;
 
     const text = data.text || '';
     let intent = null;
@@ -109,10 +76,9 @@
       intent = data.intents[0].name;
     }
 
-    responseEl.textContent = `Intención: ${intent || 'No detectada'}\nTexto: ${text}`;
+    responseEl.textContent = `Texto reconocido: ${text}\nIntención: ${intent || 'No detectada'}`;
 
     let answer = '';
-
     if (intent === 'about_brand') {
       answer = 'Somos una marca dedicada a las mejores pastas italianas artesanales.';
     } else if (intent === 'get_recipe') {
@@ -125,106 +91,55 @@
     speak(answer);
   }
 
-  // Función para iniciar SpeechRecognition (Chrome, Android)
-  function startSpeechRecognition() {
-    if (isListening) {
-      recognition.stop();
-      return;
-    }
-
-    recognition = new SpeechRecognition();
-    recognition.lang = 'es-ES';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      isListening = true;
-      startBtn.textContent = 'Detener escucha';
-      statusEl.textContent = 'Escuchando...';
-      responseEl.textContent = '';
-    };
-
-    recognition.onresult = async (event) => {
-      const text = event.results[0][0].transcript;
-      statusEl.textContent = `Reconocido: "${text}"`;
-      const witResponse = await sendTextToWit(text);
-      if (witResponse) handleWitResponse(witResponse);
-    };
-
-    recognition.onerror = (event) => {
-      statusEl.textContent = `Error: ${event.error}`;
-      isListening = false;
-      startBtn.textContent = 'Iniciar conversación';
-    };
-
-    recognition.onend = () => {
-      isListening = false;
-      startBtn.textContent = 'Iniciar conversación';
-      statusEl.textContent = 'Escucha finalizada';
-    };
-
-    recognition.start();
-  }
-
-  // Función para grabar audio y enviar a Wit.ai (Safari iOS)
-  async function startAudioRecording() {
+  // Iniciar o detener grabación
+  btnRecord.addEventListener('click', async () => {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
       mediaRecorder.stop();
-      startBtn.textContent = 'Iniciar conversación';
+      btnRecord.textContent = '🎤 Grabar voz';
+      statusEl.textContent = 'Procesando audio...';
       return;
     }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      statusEl.textContent = 'Grabación de audio no soportada en este navegador';
+      statusEl.textContent = 'Tu navegador no soporta grabación de audio.';
       return;
     }
 
-    const constraints = { audio: true };
-
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      audioChunks = [];
 
-      chunks = [];
-      mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/mp4'  // Cambiado para mejor compatibilidad en iOS
-      });
-
-      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
 
       mediaRecorder.onstart = () => {
-        statusEl.textContent = 'Grabando audio... Presiona el botón para detener';
-        startBtn.textContent = 'Detener grabación';
+        btnRecord.textContent = '⏹ Detener grabación';
+        statusEl.textContent = 'Grabando... habla ahora';
         responseEl.textContent = '';
       };
 
       mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: 'audio/mp4' });
-        chunks = [];
-        const witResponse = await sendAudioToWit(blob);
-        if (witResponse) handleWitResponse(witResponse);
+        statusEl.textContent = 'Grabación detenida. Enviando audio...';
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+
+        const witResponse = await sendAudioToWit(audioBlob);
+        if (witResponse) {
+          handleWitResponse(witResponse);
+        }
       };
 
       mediaRecorder.start();
+
     } catch (err) {
-      statusEl.textContent = 'Error al acceder al micrófono o iniciar grabación';
+      statusEl.textContent = 'Permiso de micrófono denegado o error.';
       console.error(err);
     }
-  }
-
-  startBtn.addEventListener('click', () => {
-    if (isSpeechRecSupported) {
-      startSpeechRecognition();
-    } else {
-      startAudioRecording();
-    }
   });
-
 })();
 </script>
 
 </body>
-</html>
-
+</html> 
 
 
 <!-- <!DOCTYPE html>
