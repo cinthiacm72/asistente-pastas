@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Asistente Voz Pasta - Wit.ai Vanilla</title>
+<title>Asistente Voz Pasta - Wit.ai Vanilla (iOS compatible)</title>
 <style>
   body { font-family: Arial, sans-serif; padding: 2rem; max-width: 600px; margin: auto; }
   button { font-size: 1.2rem; padding: 0.7rem 1.5rem; }
-  #status { margin-top: 1rem; font-weight: bold; }
+  #status { margin-top: 1rem; font-weight: bold; white-space: pre-wrap; }
   #response { margin-top: 1rem; white-space: pre-wrap; }
 </style>
 </head>
@@ -30,40 +30,95 @@
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const isSpeechRecSupported = !!SpeechRecognition;
 
-  // Detectar iOS
-  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
   let recognition;
   let isListening = false;
 
+  let mediaRecorder;
+  let chunks = [];
+
+  // Función para enviar texto a Wit.ai
   async function sendTextToWit(text) {
     statusEl.textContent = 'Enviando texto a Wit.ai...';
-
     const url = `https://api.wit.ai/message?v=20230606&q=${encodeURIComponent(text)}`;
     try {
       const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${WIT_TOKEN}` }
+        headers: {
+          Authorization: `Bearer ${WIT_TOKEN}`
+        }
       });
-      if (!res.ok) throw new Error('Error HTTP ' + res.status);
-      return await res.json();
+      if (!res.ok) {
+        statusEl.textContent = 'Error al conectar con Wit.ai';
+        return null;
+      }
+      const data = await res.json();
+      return data;
     } catch (e) {
-      statusEl.textContent = 'Error al conectar con Wit.ai: ' + e.message;
+      statusEl.textContent = 'Error en la petición a Wit.ai';
       return null;
     }
   }
 
+  // Función para enviar audio a Wit.ai (para iOS)
+  async function sendAudioToWit(blob) {
+    statusEl.textContent = 'Enviando audio a Wit.ai...';
+
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const res = await fetch('https://api.wit.ai/speech?v=20230606', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${WIT_TOKEN}`,
+          'Content-Type': blob.type
+        },
+        body: arrayBuffer
+      });
+      if (!res.ok) {
+        statusEl.textContent = `Error al enviar audio a Wit.ai (status ${res.status})`;
+        return null;
+      }
+      const data = await res.json();
+      return data;
+    } catch (e) {
+      statusEl.textContent = 'Error en la petición de audio a Wit.ai';
+      return null;
+    }
+  }
+
+  // Función para hablar (Text to Speech)
   function speak(text) {
     if (!('speechSynthesis' in window)) return;
     const utterance = new SpeechSynthesisUtterance(text);
     window.speechSynthesis.speak(utterance);
   }
 
-  function startSpeechRecognition() {
-    if (!isSpeechRecSupported) {
-      statusEl.textContent = 'Tu navegador no soporta reconocimiento de voz.';
-      return;
+  // Función para manejar respuesta de Wit.ai
+  function handleWitResponse(data) {
+    console.log('Wit.ai response:', data);
+
+    const text = data.text || '';
+    let intent = null;
+    if (data.intents && data.intents.length > 0) {
+      intent = data.intents[0].name;
     }
 
+    responseEl.textContent = `Intención: ${intent || 'No detectada'}\nTexto: ${text}`;
+
+    let answer = '';
+
+    if (intent === 'about_brand') {
+      answer = 'Somos una marca dedicada a las mejores pastas italianas artesanales.';
+    } else if (intent === 'get_recipe') {
+      answer = 'Aquí tienes una receta fácil: Pasta con salsa de tomate y albahaca.';
+    } else {
+      answer = 'Lo siento, no entendí tu pregunta. ¿Puedes repetir?';
+    }
+
+    responseEl.textContent += `\n\nRespuesta: ${answer}`;
+    speak(answer);
+  }
+
+  // Función para iniciar SpeechRecognition (Chrome, Android)
+  function startSpeechRecognition() {
     if (isListening) {
       recognition.stop();
       return;
@@ -103,42 +158,59 @@
     recognition.start();
   }
 
-  function handleWitResponse(data) {
-    console.log('Wit.ai response:', data);
-    const text = data.text || '';
-    let intent = null;
-    if (data.intents && data.intents.length > 0) {
-      intent = data.intents[0].name;
+  // Función para grabar audio y enviar a Wit.ai (Safari iOS)
+  async function startAudioRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      startBtn.textContent = 'Iniciar conversación';
+      return;
     }
 
-    responseEl.textContent = `Intención: ${intent || 'No detectada'}\nTexto: ${text}`;
-
-    let answer = '';
-    if (intent === 'about_brand') {
-      answer = 'Somos una marca dedicada a las mejores pastas italianas artesanales.';
-    } else if (intent === 'get_recipe') {
-      answer = 'Aquí tienes una receta fácil: Pasta con salsa de tomate y albahaca.';
-    } else {
-      answer = 'Lo siento, no entendí tu pregunta. ¿Puedes repetir?';
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      statusEl.textContent = 'Grabación de audio no soportada en este navegador';
+      return;
     }
 
-    responseEl.textContent += `\n\nRespuesta: ${answer}`;
-    speak(answer);
+    const constraints = { audio: true };
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      chunks = [];
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/mp4'  // Cambiado para mejor compatibilidad en iOS
+      });
+
+      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+
+      mediaRecorder.onstart = () => {
+        statusEl.textContent = 'Grabando audio... Presiona el botón para detener';
+        startBtn.textContent = 'Detener grabación';
+        responseEl.textContent = '';
+      };
+
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/mp4' });
+        chunks = [];
+        const witResponse = await sendAudioToWit(blob);
+        if (witResponse) handleWitResponse(witResponse);
+      };
+
+      mediaRecorder.start();
+    } catch (err) {
+      statusEl.textContent = 'Error al acceder al micrófono o iniciar grabación';
+      console.error(err);
+    }
   }
 
   startBtn.addEventListener('click', () => {
-    if (!isSpeechRecSupported) {
-      statusEl.textContent = 'Tu navegador no soporta reconocimiento de voz.';
-      return;
+    if (isSpeechRecSupported) {
+      startSpeechRecognition();
+    } else {
+      startAudioRecording();
     }
-
-    if (isIos && !isSpeechRecSupported) {
-      statusEl.textContent = 'Reconocimiento de voz no soportado en esta versión de iOS.';
-      return;
-    }
-
-    startSpeechRecognition();
   });
+
 })();
 </script>
 
