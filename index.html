@@ -8,7 +8,7 @@
   body { font-family: Arial, sans-serif; padding: 2rem; max-width: 600px; margin: auto; }
   button { font-size: 1.2rem; padding: 0.7rem 1.5rem; }
   #status { margin-top: 1rem; font-weight: bold; }
-  #response { margin-top: 1rem; }
+  #response { margin-top: 1rem; white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -21,58 +21,51 @@
 
 <script>
 (() => {
-  const WIT_TOKEN = '72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK'; // <- Pon aquí tu token
+  const WIT_TOKEN = '72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK'; // Tu token Wit.ai
 
   const startBtn = document.getElementById('startBtn');
   const statusEl = document.getElementById('status');
   const responseEl = document.getElementById('response');
 
-  // Check support
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const isSpeechRecSupported = !!SpeechRecognition;
+
+  // Detectar iOS
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
   let recognition;
   let isListening = false;
 
-  // Función para hacer petición a Wit.ai con texto
   async function sendTextToWit(text) {
     statusEl.textContent = 'Enviando texto a Wit.ai...';
 
     const url = `https://api.wit.ai/message?v=20230606&q=${encodeURIComponent(text)}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${WIT_TOKEN}`
-      }
-    });
-
-    if (!res.ok) {
-      statusEl.textContent = 'Error al conectar con Wit.ai';
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${WIT_TOKEN}` }
+      });
+      if (!res.ok) throw new Error('Error HTTP ' + res.status);
+      return await res.json();
+    } catch (e) {
+      statusEl.textContent = 'Error al conectar con Wit.ai: ' + e.message;
       return null;
     }
-    const data = await res.json();
-    return data;
   }
 
-  // Función para hablar (Text to Speech)
   function speak(text) {
     if (!('speechSynthesis' in window)) return;
     const utterance = new SpeechSynthesisUtterance(text);
     window.speechSynthesis.speak(utterance);
   }
 
-  // Manejo con SpeechRecognition (Chrome, Android)
-  async function startSpeechRecognition() {
+  function startSpeechRecognition() {
     if (!isSpeechRecSupported) {
-      statusEl.textContent = 'SpeechRecognition no soportado en este navegador. Usando grabación de audio.';
-      startAudioRecording();
+      statusEl.textContent = 'Tu navegador no soporta reconocimiento de voz.';
       return;
     }
 
     if (isListening) {
       recognition.stop();
-      isListening = false;
-      startBtn.textContent = 'Iniciar conversación';
-      statusEl.textContent = 'Detenido';
       return;
     }
 
@@ -110,75 +103,17 @@
     recognition.start();
   }
 
-  // Función para grabar audio en navegadores sin SpeechRecognition (ej: Safari iOS)
-  async function startAudioRecording() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      statusEl.textContent = 'Grabación de audio no soportada';
-      return;
-    }
-
-    statusEl.textContent = 'Grabando audio... Presiona el botón para detener';
-
-    let chunks = [];
-    let mediaRecorder;
-
-    if (startBtn.textContent === 'Detener grabación') {
-      mediaRecorder.stop();
-      startBtn.textContent = 'Iniciar conversación';
-      return;
-    }
-
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
-
-    mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-    mediaRecorder.onstop = async () => {
-      const blob = new Blob(chunks, { type: 'audio/webm' });
-      chunks = [];
-      statusEl.textContent = 'Enviando audio a Wit.ai...';
-
-      const arrayBuffer = await blob.arrayBuffer();
-
-      // Wit.ai API para audio (POST /speech)
-      const res = await fetch('https://api.wit.ai/speech?v=20230606', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${WIT_TOKEN}`,
-          'Content-Type': 'audio/webm'
-        },
-        body: arrayBuffer
-      });
-
-      if (!res.ok) {
-        statusEl.textContent = 'Error al enviar audio a Wit.ai';
-        return;
-      }
-      const witResponse = await res.json();
-      statusEl.textContent = `Respuesta Wit.ai: ${witResponse.text || '[sin texto]'}`;
-      if (witResponse) handleWitResponse(witResponse);
-    };
-
-    mediaRecorder.start();
-    startBtn.textContent = 'Detener grabación';
-  }
-
-  // Función para manejar respuesta de Wit.ai
   function handleWitResponse(data) {
     console.log('Wit.ai response:', data);
-    // Extraer texto reconocido
     const text = data.text || '';
-    // Extraer intención (intent)
     let intent = null;
     if (data.intents && data.intents.length > 0) {
       intent = data.intents[0].name;
     }
 
-    // Mostrar texto y respuesta
     responseEl.textContent = `Intención: ${intent || 'No detectada'}\nTexto: ${text}`;
 
-    // Respuestas básicas programadas
     let answer = '';
-
     if (intent === 'about_brand') {
       answer = 'Somos una marca dedicada a las mejores pastas italianas artesanales.';
     } else if (intent === 'get_recipe') {
@@ -191,20 +126,24 @@
     speak(answer);
   }
 
-  // Botón principal
   startBtn.addEventListener('click', () => {
-    if (isSpeechRecSupported) {
-      startSpeechRecognition();
-    } else {
-      startAudioRecording();
+    if (!isSpeechRecSupported) {
+      statusEl.textContent = 'Tu navegador no soporta reconocimiento de voz.';
+      return;
     }
+
+    if (isIos && !isSpeechRecSupported) {
+      statusEl.textContent = 'Reconocimiento de voz no soportado en esta versión de iOS.';
+      return;
+    }
+
+    startSpeechRecognition();
   });
 })();
 </script>
 
 </body>
 </html>
-
 
 
 
