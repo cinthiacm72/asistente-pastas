@@ -14,7 +14,19 @@ recordBtn.addEventListener('click', async () => {
   }
 
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  mediaRecorder = new MediaRecorder(stream);
+
+  // Verificar compatibilidad del tipo MIME
+  let mimeType = '';
+  if (MediaRecorder.isTypeSupported('audio/mp4')) {
+    mimeType = 'audio/mp4';
+  } else if (MediaRecorder.isTypeSupported('audio/mpeg')) {
+    mimeType = 'audio/mpeg';
+  } else {
+    status.textContent = "Formato de audio no compatible.";
+    return;
+  }
+
+  mediaRecorder = new MediaRecorder(stream, { mimeType });
 
   mediaRecorder.start();
   audioChunks = [];
@@ -26,8 +38,8 @@ recordBtn.addEventListener('click', async () => {
 
   mediaRecorder.addEventListener('stop', async () => {
     status.textContent = "⏳ Procesando...";
-    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-    const text = await sendToWitSpeech(audioBlob);
+    const audioBlob = new Blob(audioChunks, { type: mimeType });
+    const text = await sendToWitSpeech(audioBlob, mimeType);
     const response = getResponse(text);
 
     output.innerHTML += `
@@ -44,12 +56,12 @@ recordBtn.addEventListener('click', async () => {
   }, 4000);
 });
 
-async function sendToWitSpeech(blob) {
+async function sendToWitSpeech(blob, mimeType) {
   const res = await fetch("https://api.wit.ai/speech?v=20230603", {
     method: "POST",
     headers: {
       Authorization: WIT_TOKEN,
-      "Content-Type": "audio/webm"
+      "Content-Type": mimeType
     },
     body: blob
   });
