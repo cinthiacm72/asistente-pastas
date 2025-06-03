@@ -3,87 +3,95 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Asistente de Voz - Pastas</title>
+  <title>Asistente de Voz - Pastas (Fluido)</title>
   <style>
-    body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; padding: 1rem; }
-    button { font-size: 1.2rem; padding: 0.8rem 1.5rem; cursor: pointer; }
-    #status { margin-top: 1rem; font-weight: bold; min-height: 1.5em; }
-    #response { margin-top: 1rem; background: #f0f0f0; padding: 1rem; border-radius: 8px; }
+    body { font-family: sans-serif; padding: 2rem; max-width: 600px; margin: auto; }
+    button { font-size: 1.5rem; padding: 1rem 2rem; }
+    #status { margin-top: 1rem; font-weight: bold; }
+    #response { margin-top: 1rem; background: #eee; padding: 1rem; border-radius: 5px; }
   </style>
 </head>
 <body>
 
 <h1>Asistente de Voz - Pastas</h1>
-<button id="btn">🎙️ Hablar</button>
-<div id="status">Presiona el botón y habla.</div>
+<button id="startBtn">🎤 Hablar</button>
+<div id="status">Toca el botón y habla...</div>
 <div id="response"></div>
 
 <script>
-  const btn = document.getElementById('btn');
+  const WIT_TOKEN = 'TU_TOKEN_DE_WIT_AI_AQUI'; // reemplázalo con tu token real
+
+  const startBtn = document.getElementById('startBtn');
   const statusEl = document.getElementById('status');
   const responseEl = document.getElementById('response');
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const recognition = new SpeechRecognition();
-  recognition.lang = 'es-ES';
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
-  recognition.continuous = false;
+  let recognition;
+  if ('webkitSpeechRecognition' in window) {
+    recognition = new webkitSpeechRecognition();
+    recognition.lang = 'es-ES';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      statusEl.textContent = 'Escuchando...';
+    };
+
+    recognition.onerror = (e) => {
+      console.error('Error:', e);
+      if (e.error === 'no-speech') {
+        statusEl.textContent = 'No se detectó voz. Intenta de nuevo.';
+      } else {
+        statusEl.textContent = 'Error: ' + e.error;
+      }
+    };
+
+    recognition.onresult = async (event) => {
+      const text = event.results[0][0].transcript;
+      statusEl.textContent = 'Texto reconocido: ' + text;
+      responseEl.textContent = 'Procesando...';
+
+      try {
+        const res = await fetch(`https://api.wit.ai/message?v=20250603&q=${encodeURIComponent(text)}`, {
+          headers: {
+            Authorization: `Bearer ${WIT_TOKEN}`
+          }
+        });
+
+        const data = await res.json();
+        const intent = data.intents && data.intents.length > 0 ? data.intents[0].name : 'ninguno';
+        let answer = '';
+
+        if (intent === 'about_brand') {
+          answer = 'Somos una marca dedicada a las mejores pastas italianas artesanales.';
+        } else if (intent === 'get_recipe') {
+          answer = 'Aquí tienes una receta fácil: Pasta con salsa de tomate y albahaca.';
+        } else {
+          answer = 'Lo siento, no entendí tu pregunta. ¿Puedes repetir?';
+        }
+
+        responseEl.textContent = `Intención: ${intent}\n\nRespuesta: ${answer}`;
+        speak(answer);
+
+      } catch (err) {
+        console.error(err);
+        responseEl.textContent = 'Error al contactar Wit.ai';
+      }
+    };
+
+  } else {
+    alert('Tu navegador no soporta reconocimiento de voz.');
+  }
 
   function speak(text) {
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'es-ES';
     window.speechSynthesis.speak(utterance);
   }
 
-  function handleText(text) {
-    let answer = '';
-    if (text.includes('marca')) {
-      answer = 'Somos una marca de pastas italianas artesanales.';
-    } else if (text.includes('receta')) {
-      answer = 'Aquí tienes una receta: pasta con salsa de tomate y albahaca.';
-    } else {
-      answer = 'Lo siento, no entendí. ¿Puedes repetirlo?';
+  startBtn.addEventListener('click', () => {
+    if (recognition) {
+      responseEl.textContent = '';
+      recognition.start();
     }
-
-    responseEl.textContent = `Tú dijiste: "${text}"\n\nRespuesta: ${answer}`;
-    speak(answer);
-  }
-
-  recognition.onstart = () => {
-    statusEl.textContent = 'Escuchando... habla ahora.';
-    responseEl.textContent = '';
-  };
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    handleText(transcript);
-    statusEl.textContent = '✔️ Voz reconocida.';
-    btn.disabled = false;
-  };
-
-  recognition.onerror = (e) => {
-    if (e.error === 'no-speech') {
-      statusEl.textContent = 'No se detectó voz. Reintentando...';
-      recognition.start(); // 🔁 Reintenta automáticamente
-    } else {
-      statusEl.textContent = 'Error en reconocimiento.';
-      console.error(e);
-    }
-    btn.disabled = false;
-  };
-
-  recognition.onend = () => {
-    btn.disabled = false;
-  };
-
-  btn.addEventListener('click', () => {
-    if (!SpeechRecognition) {
-      alert('Tu navegador no soporta reconocimiento de voz.');
-      return;
-    }
-    btn.disabled = true;
-    recognition.start();
   });
 </script>
 
