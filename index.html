@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Asistente de Voz - Pastas (Wit.ai audio)</title>
+<title>Asistente de Voz - Pastas (Wit.ai audio/ogg)</title>
 <style>
   body { font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 1rem; }
   button { font-size: 1.2rem; padding: 0.8rem 1.5rem; cursor: pointer; }
@@ -20,7 +20,7 @@
 
 <script>
 (() => {
-  const WIT_TOKEN = '72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK'; // Pon aquí tu token real (sin espacios)
+  const WIT_TOKEN = '72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK'; // Pon aquí tu token real sin espacios
 
   const btnRecord = document.getElementById('btnRecord');
   const statusEl = document.getElementById('status');
@@ -29,7 +29,10 @@
   let mediaRecorder;
   let audioChunks = [];
 
-  // Función para reproducir texto (Text to Speech)
+  // Verificar soporte para audio/ogg
+  const canRecordOgg = MediaRecorder.isTypeSupported('audio/ogg; codecs=opus');
+
+  // Text to Speech
   function speak(text) {
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(text);
@@ -37,7 +40,7 @@
     }
   }
 
-  // Función para enviar audio a Wit.ai
+  // Enviar audio a Wit.ai
   async function sendAudioToWit(audioBlob) {
     statusEl.textContent = 'Enviando audio a Wit.ai...';
 
@@ -46,7 +49,7 @@
         method: 'POST',
         headers: {
           Authorization: `Bearer ${WIT_TOKEN}`,
-          'Content-Type': 'audio/webm'
+          'Content-Type': canRecordOgg ? 'audio/ogg' : 'audio/webm'
         },
         body: audioBlob
       });
@@ -66,7 +69,7 @@
     }
   }
 
-  // Función para procesar respuesta de Wit.ai y responder
+  // Procesar respuesta Wit.ai
   function handleWitResponse(data) {
     if (!data) return;
 
@@ -91,7 +94,7 @@
     speak(answer);
   }
 
-  // Iniciar o detener grabación
+  // Evento click grabar/detener
   btnRecord.addEventListener('click', async () => {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
       mediaRecorder.stop();
@@ -107,7 +110,11 @@
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: canRecordOgg ? 'audio/ogg; codecs=opus' : 'audio/webm'
+      });
+
       audioChunks = [];
 
       mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
@@ -120,7 +127,8 @@
 
       mediaRecorder.onstop = async () => {
         statusEl.textContent = 'Grabación detenida. Enviando audio...';
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const mimeType = canRecordOgg ? 'audio/ogg' : 'audio/webm';
+        const audioBlob = new Blob(audioChunks, { type: mimeType });
 
         const witResponse = await sendAudioToWit(audioBlob);
         if (witResponse) {
@@ -139,7 +147,7 @@
 </script>
 
 </body>
-</html> 
+</html>
 
 
 <!-- <!DOCTYPE html>
