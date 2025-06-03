@@ -1,80 +1,72 @@
-const startBtn = document.getElementById('start-btn');
+const recordBtn = document.getElementById('record-btn');
+const status = document.getElementById('status');
 const output = document.getElementById('output');
 
-// 👇 Token de Wit.ai (reemplaza por tu propio token si es necesario)
-const WIT_TOKEN = "Bearer 72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK";
+const WIT_TOKEN = "Bearer 72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK"; // Usa tu token de Wit.ai
 
-// 🧠 Envía texto a Wit.ai
-async function sendToWitAI(message) {
-  try {
-    const res = await fetch('https://api.wit.ai/message?v=20230603&q=' + encodeURIComponent(message), {
-      headers: {
-        Authorization: WIT_TOKEN
-      }
-    });
-    const data = await res.json();
-    return data;
-  } catch (err) {
-    console.error("Error al conectar con Wit.ai:", err);
-    return { intents: [] };
-  }
-}
+let mediaRecorder;
+let audioChunks = [];
 
-// 💬 Decide qué responder según el intent
-function getResponse(intentName) {
-  switch (intentName) {
-    case "saludo":
-      return "¡Hola! ¿Cómo puedo ayudarte?";
-    case "productos":
-      return "Tenemos fusilli, penne y spaghetti.";
-    case "recetas":
-      return "Claro, dime qué ingredientes tienes.";
-    default:
-      return "No entendí bien eso. ¿Puedes repetirlo?";
-  }
-}
-
-// 🎙️ Inicia reconocimiento de voz
-function startRecognition() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-  if (!SpeechRecognition) {
-    output.textContent = "Tu navegador no soporta reconocimiento de voz.";
+recordBtn.addEventListener('click', async () => {
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    status.textContent = "Tu navegador no soporta grabación de audio.";
     return;
   }
 
-  const recognition = new SpeechRecognition();
-  recognition.lang = 'es-ES';
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaRecorder = new MediaRecorder(stream);
 
-  output.textContent = "🎧 Escuchando...";
+  mediaRecorder.start();
+  audioChunks = [];
+  status.textContent = "🎙️ Grabando...";
 
-  recognition.onresult = async (event) => {
-    const userSpeech = event.results[0][0].transcript;
-    output.innerHTML = `<p><strong>Tú:</strong> ${userSpeech}</p>`;
+  mediaRecorder.addEventListener('dataavailable', event => {
+    audioChunks.push(event.data);
+  });
 
-    const witData = await sendToWitAI(userSpeech);
-    const intent = witData.intents?.[0]?.name || null;
-    const response = getResponse(intent);
+  mediaRecorder.addEventListener('stop', async () => {
+    status.textContent = "⏳ Procesando...";
+    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+    const text = await sendToWitSpeech(audioBlob);
+    const response = getResponse(text);
 
-    const reply = document.createElement('p');
-    reply.innerHTML = `<strong>Asistente:</strong> ${response}`;
-    output.appendChild(reply);
-  };
+    output.innerHTML += `
+      <p><strong>Tú:</strong> ${text}</p>
+      <p><strong>Asistente:</strong> ${response}</p>
+    `;
+    status.textContent = "Presiona para hablar";
+  });
 
-  recognition.onerror = (event) => {
-    output.innerHTML = `<p style="color:red;">Error: ${event.error}</p>`;
-  };
+  // Graba 4 segundos
+  setTimeout(() => {
+    mediaRecorder.stop();
+    stream.getTracks().forEach(track => track.stop());
+  }, 4000);
+});
 
-  recognition.start();
+async function sendToWitSpeech(blob) {
+  const res = await fetch("https://api.wit.ai/speech?v=20230603", {
+    method: "POST",
+    headers: {
+      Authorization: WIT_TOKEN,
+      "Content-Type": "audio/webm"
+    },
+    body: blob
+  });
+
+  if (!res.ok) {
+    console.error("Error:", await res.text());
+    return "No se pudo entender.";
+  }
+
+  const data = await res.json();
+  return data.text || "No se entendió.";
 }
 
-// 🖱️ Inicia sólo por interacción (necesario para iOS)
-startBtn.addEventListener('click', () => {
-  try {
-    startRecognition();
-  } catch (e) {
-    output.innerHTML = `<p style="color:red;">Error inesperado: ${e.message}</p>`;
-  }
-});
+function getResponse(text) {
+  const txt = text.toLowerCase();
+  if (txt.includes("hola")) return "¡Hola! ¿Cómo puedo ayudarte?";
+  if (txt.includes("producto") || txt.includes("tienen")) return "Tenemos fusilli, penne y spaghetti.";
+  if (txt.includes("receta")) return "Claro, dime qué ingredientes tienes.";
+  return "No entendí bien eso. ¿Puedes repetirlo?";
+}
