@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Prueba Wit.ai /speech</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin-top: 50px;
+      background-color: #f9f9f9;
+    }
+    button {
+      padding: 1rem 2rem;
+      font-size: 1.1rem;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    pre {
+      background: #eee;
+      padding: 1rem;
+      border-radius: 6px;
+      width: 90%;
+      max-width: 600px;
+      margin: 1rem auto;
+      text-align: left;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎙️ Prueba Wit.ai /speech</h1>
+  <button id="start-record">Grabar y Enviar</button>
+  <p id="status">Estado: esperando</p>
+  <pre id="response"></pre>
+
+  <script>
+    const button = document.getElementById("start-record");
+    const statusText = document.getElementById("status");
+    const responseBox = document.getElementById("response");
+
+    const WIT_TOKEN = "Bearer TU_TOKEN_AQUI"; // ← Reemplaza con tu Server Access Token
+
+    let mediaRecorder;
+    let audioChunks = [];
+
+    button.onclick = async () => {
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        alert("Tu navegador no soporta grabación de audio.");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        statusText.textContent = "Enviando a Wit.ai...";
+
+        const blob = new Blob(audioChunks, { type: "audio/webm" });
+
+        try {
+          const res = await fetch("https://api.wit.ai/speech?v=20230603", {
+            method: "POST",
+            headers: {
+              Authorization: WIT_TOKEN,
+              "Content-Type": "audio/webm"
+            },
+            body: blob
+          });
+
+          const result = await res.json();
+          responseBox.textContent = JSON.stringify(result, null, 2);
+          statusText.textContent = "Listo";
+        } catch (err) {
+          statusText.textContent = "Error al enviar a Wit.ai";
+          responseBox.textContent = err.toString();
+        }
+      };
+
+      statusText.textContent = "Grabando 3 segundos...";
+      mediaRecorder.start();
+
+      setTimeout(() => {
+        mediaRecorder.stop();
+      }, 3000);
+    };
+  </script>
+</body>
+</html>
