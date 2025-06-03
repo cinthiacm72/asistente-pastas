@@ -20,6 +20,14 @@
 <div id="response"></div>
 
 <script>
+
+  if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+  console.log("SpeechRecognition disponible");
+} else {
+  console.log("SpeechRecognition NO disponible, solo grabación audio");
+}
+
+  
 (() => {
   const WIT_TOKEN = '72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK'; // Tu token Wit.ai
 
