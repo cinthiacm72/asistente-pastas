@@ -2,7 +2,7 @@ const recordBtn = document.getElementById('record-btn');
 const status = document.getElementById('status');
 const output = document.getElementById('output');
 
-const WIT_TOKEN = "Bearer 72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK"; // Usa tu token de Wit.ai
+const WIT_TOKEN = "Bearer 72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK";
 
 let mediaRecorder;
 let audioChunks = [];
@@ -15,7 +15,6 @@ recordBtn.addEventListener('click', async () => {
 
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-  // Verificar compatibilidad del tipo MIME
   let mimeType = '';
   if (MediaRecorder.isTypeSupported('audio/mp4')) {
     mimeType = 'audio/mp4';
@@ -28,8 +27,8 @@ recordBtn.addEventListener('click', async () => {
 
   mediaRecorder = new MediaRecorder(stream, { mimeType });
 
-  mediaRecorder.start();
   audioChunks = [];
+  mediaRecorder.start();
   status.textContent = "🎙️ Grabando...";
 
   mediaRecorder.addEventListener('dataavailable', event => {
@@ -46,10 +45,11 @@ recordBtn.addEventListener('click', async () => {
       <p><strong>Tú:</strong> ${text}</p>
       <p><strong>Asistente:</strong> ${response}</p>
     `;
+    speak(response); // Aquí se activa la voz del asistente
     status.textContent = "Presiona para hablar";
   });
 
-  // Graba 4 segundos
+  // Grabar durante 4 segundos
   setTimeout(() => {
     mediaRecorder.stop();
     stream.getTracks().forEach(track => track.stop());
@@ -57,22 +57,27 @@ recordBtn.addEventListener('click', async () => {
 });
 
 async function sendToWitSpeech(blob, mimeType) {
-  const res = await fetch("https://api.wit.ai/speech?v=20230603", {
-    method: "POST",
-    headers: {
-      Authorization: WIT_TOKEN,
-      "Content-Type": mimeType
-    },
-    body: blob
-  });
+  try {
+    const res = await fetch("https://api.wit.ai/speech?v=20230603", {
+      method: "POST",
+      headers: {
+        Authorization: WIT_TOKEN,
+        "Content-Type": mimeType
+      },
+      body: blob
+    });
 
-  if (!res.ok) {
-    console.error("Error:", await res.text());
-    return "No se pudo entender.";
+    if (!res.ok) {
+      console.error("Wit.ai error:", await res.text());
+      return "No se pudo entender.";
+    }
+
+    const data = await res.json();
+    return data.text || "No se entendió.";
+  } catch (err) {
+    console.error("Error de red:", err);
+    return "Error al conectar con Wit.ai.";
   }
-
-  const data = await res.json();
-  return data.text || "No se entendió.";
 }
 
 function getResponse(text) {
@@ -81,4 +86,10 @@ function getResponse(text) {
   if (txt.includes("producto") || txt.includes("tienen")) return "Tenemos fusilli, penne y spaghetti.";
   if (txt.includes("receta")) return "Claro, dime qué ingredientes tienes.";
   return "No entendí bien eso. ¿Puedes repetirlo?";
+}
+
+function speak(text) {
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "es-ES";
+  speechSynthesis.speak(utterance);
 }
