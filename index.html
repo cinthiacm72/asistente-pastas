@@ -2,124 +2,16 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Asistente de Voz - Pastas (Fluido)</title>
-  <style>
-    body { font-family: sans-serif; padding: 2rem; max-width: 600px; margin: auto; }
-    button { font-size: 1.5rem; padding: 1rem 2rem; }
-    #status { margin-top: 1rem; font-weight: bold; }
-    #response { margin-top: 1rem; background: #eee; padding: 1rem; border-radius: 5px; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Asistente de Voz de Pastas</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
-<h1>Asistente de Voz - Pastas</h1>
-<button id="startBtn">🎤 Hablar</button>
-<div id="status">Toca el botón y habla...</div>
-<div id="response"></div>
-
-
-<script>
-  const WIT_TOKEN = '72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK'; // reemplázalo con tu token real
-
-  const startBtn = document.getElementById('startBtn');
-  const statusEl = document.getElementById('status');
-  const responseEl = document.getElementById('response');
-
-  let recognition;
-  if ('webkitSpeechRecognition' in window) {
-    recognition = new webkitSpeechRecognition();
-    recognition.lang = 'es-ES';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      statusEl.textContent = 'Escuchando...';
-    };
-
-    recognition.onerror = (e) => {
-      console.error('Error:', e);
-      if (e.error === 'no-speech') {
-        statusEl.textContent = 'No se detectó voz. Intenta de nuevo.';
-      } else {
-        statusEl.textContent = 'Error: ' + e.error;
-      }
-    };
-
-    recognition.onresult = async (event) => {
-      const text = event.results[0][0].transcript;
-      statusEl.textContent = 'Texto reconocido: ' + text;
-      responseEl.textContent = 'Procesando...';
-
-      try {
-        const res = await fetch(`https://api.wit.ai/message?v=20250603&q=${encodeURIComponent(text)}`, {
-          headers: {
-            Authorization: `Bearer ${WIT_TOKEN}`
-          }
-        });
-
-        const data = await res.json();
-        const intent = data.intents && data.intents.length > 0 ? data.intents[0].name : 'ninguno';
-        let answer = '';
-
-        if (intent === 'about_brand') {
-          answer = 'Somos una marca dedicada a las mejores pastas italianas artesanales.';
-        } else if (intent === 'get_recipe') {
-          answer = 'Aquí tienes una receta fácil: Pasta con salsa de tomate y albahaca.';
-        } else {
-          answer = 'Lo siento, no entendí tu pregunta. ¿Puedes repetir?';
-        }
-
-        responseEl.textContent = `Intención: ${intent}\n\nRespuesta: ${answer}`;
-        speak(answer);
-
-      } catch (err) {
-        console.error(err);
-        responseEl.textContent = 'Error al contactar Wit.ai';
-      }
-    };
-
-  } else {
-    alert('Tu navegador no soporta reconocimiento de voz.');
-  }
-
-  function speak(text) {
-    const utterance = new SpeechSynthesisUtterance(text);
-    window.speechSynthesis.speak(utterance);
-  }
-
-  startBtn.addEventListener('click', () => {
-    if (recognition) {
-      responseEl.textContent = '';
-      recognition.start();
-    }
-  });
-</script>
-
+  <main>
+    <h1>Asistente de Voz</h1>
+    <button id="start-btn">🎤 Hablar</button>
+    <div id="output"></div>
+  </main>
+  <script src="script.js"></script>
 </body>
 </html>
-
-
-<!-- <!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Asistente de Pastas</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  
-  <div class="container">
-    <img src="https://www.shutterstock.com/image-vector/silhouette-monochrome-dish-hot-spaghetti-260nw-520318474.jpg" alt="Logo de Asistente Pastas" class="logo" />
-    <h1>Asistente de Pastas Italianas</h1>
-    <p>Presiona el botón y háblame. Por ejemplo: <em>"¿Qué productos ofrecen?"</em> o <em>"Sugiéreme una receta con fettuccine."</em></p>
-    
-    <button id="hablarBtn">🎤 Hablar</button>
-    
-    <div class="respuesta" id="respuesta"></div>
-  </div>
-
-  <script src="main.js"></script>
-</body>
-</html> -->
