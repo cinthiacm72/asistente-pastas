@@ -1,149 +1,110 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Asistente de Voz - Pastas (Wit.ai audio/ogg)</title>
-<style>
-  body { font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 1rem; }
-  button { font-size: 1.2rem; padding: 0.8rem 1.5rem; cursor: pointer; }
-  #status { margin-top: 1rem; font-weight: bold; min-height: 1.5em; }
-  #response { white-space: pre-wrap; margin-top: 1rem; background: #f4f4f4; padding: 1rem; border-radius: 5px; min-height: 80px;}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Asistente de Voz Fluido</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; padding: 1rem; }
+    button { font-size: 1.2rem; padding: 0.8rem 1.5rem; cursor: pointer; }
+    #status { margin-top: 1rem; font-weight: bold; min-height: 1.5em; }
+    #response { white-space: pre-wrap; margin-top: 1rem; background: #f4f4f4; padding: 1rem; border-radius: 5px; }
+  </style>
 </head>
 <body>
 
-<h1>Asistente de Voz - Pastas</h1>
-<button id="btnRecord">🎤 Grabar voz</button>
-<div id="status">Presiona "Grabar voz" para comenzar.</div>
+<h1>Asistente de Voz - Pastas 🍝</h1>
+<button id="btnSpeak">🎙️ Hablar</button>
+<div id="status">Presiona el botón y habla.</div>
 <div id="response"></div>
 
 <script>
-(() => {
-  const WIT_TOKEN = '72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK'; // Pon aquí tu token real sin espacios
+const WIT_TOKEN = '72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK'; // Reemplaza con tu token
 
-  const btnRecord = document.getElementById('btnRecord');
-  const statusEl = document.getElementById('status');
-  const responseEl = document.getElementById('response');
+const btn = document.getElementById('btnSpeak');
+const statusEl = document.getElementById('status');
+const responseEl = document.getElementById('response');
 
-  let mediaRecorder;
-  let audioChunks = [];
+let recognition;
 
-  // Verificar soporte para audio/ogg
-  const canRecordOgg = MediaRecorder.isTypeSupported('audio/ogg; codecs=opus');
+function speak(text) {
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'es-ES';
+  speechSynthesis.speak(utterance);
+}
 
-  // Text to Speech
-  function speak(text) {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      window.speechSynthesis.speak(utterance);
-    }
-  }
+async function sendTextToWit(text) {
+  statusEl.textContent = 'Procesando tu mensaje...';
 
-  // Enviar audio a Wit.ai
-  async function sendAudioToWit(audioBlob) {
-    statusEl.textContent = 'Enviando audio a Wit.ai...';
-
-    try {
-      const res = await fetch('https://api.wit.ai/speech?v=20230606', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${WIT_TOKEN}`,
-          'Content-Type': canRecordOgg ? 'audio/ogg' : 'audio/webm'
-        },
-        body: audioBlob
-      });
-
-      if (!res.ok) {
-        statusEl.textContent = `Error Wit.ai: ${res.status} ${res.statusText}`;
-        return null;
+  try {
+    const res = await fetch(`https://api.wit.ai/message?v=20230606&q=${encodeURIComponent(text)}`, {
+      headers: {
+        Authorization: `Bearer ${WIT_TOKEN}`
       }
+    });
 
-      const data = await res.json();
-      return data;
+    const data = await res.json();
 
-    } catch (e) {
-      statusEl.textContent = 'Error enviando audio a Wit.ai';
-      console.error(e);
-      return null;
-    }
-  }
+    let intent = data.intents?.[0]?.name || 'ninguna';
+    let respuesta = '';
 
-  // Procesar respuesta Wit.ai
-  function handleWitResponse(data) {
-    if (!data) return;
-
-    const text = data.text || '';
-    let intent = null;
-    if (data.intents && data.intents.length > 0) {
-      intent = data.intents[0].name;
-    }
-
-    responseEl.textContent = `Texto reconocido: ${text}\nIntención: ${intent || 'No detectada'}`;
-
-    let answer = '';
     if (intent === 'about_brand') {
-      answer = 'Somos una marca dedicada a las mejores pastas italianas artesanales.';
+      respuesta = 'Somos una marca apasionada por la pasta artesanal.';
     } else if (intent === 'get_recipe') {
-      answer = 'Aquí tienes una receta fácil: Pasta con salsa de tomate y albahaca.';
+      respuesta = 'Aquí tienes una receta: pasta con ajo, aceite de oliva y perejil.';
     } else {
-      answer = 'Lo siento, no entendí tu pregunta. ¿Puedes repetir?';
+      respuesta = 'Lo siento, no entendí. ¿Puedes repetirlo?';
     }
 
-    responseEl.textContent += `\n\nRespuesta: ${answer}`;
-    speak(answer);
+    responseEl.textContent = `Texto: ${text}\nIntención: ${intent}\n\nRespuesta: ${respuesta}`;
+    speak(respuesta);
+    statusEl.textContent = 'Listo. Puedes hablar otra vez.';
+
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = 'Error al contactar con Wit.ai';
+  }
+}
+
+function startRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    alert('Tu navegador no soporta reconocimiento de voz.');
+    return;
   }
 
-  // Evento click grabar/detener
-  btnRecord.addEventListener('click', async () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.stop();
-      btnRecord.textContent = '🎤 Grabar voz';
-      statusEl.textContent = 'Procesando audio...';
-      return;
-    }
+  recognition = new SpeechRecognition();
+  recognition.lang = 'es-ES';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      statusEl.textContent = 'Tu navegador no soporta grabación de audio.';
-      return;
-    }
+  recognition.onstart = () => {
+    statusEl.textContent = 'Escuchando...';
+    responseEl.textContent = '';
+  };
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  recognition.onerror = (e) => {
+    console.error(e);
+    statusEl.textContent = 'Error en el reconocimiento.';
+  };
 
-      mediaRecorder = new MediaRecorder(stream, {
-        mimeType: canRecordOgg ? 'audio/ogg; codecs=opus' : 'audio/webm'
-      });
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    sendTextToWit(transcript);
+  };
 
-      audioChunks = [];
+  recognition.onend = () => {
+    btn.disabled = false;
+  };
 
-      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+  recognition.start();
+}
 
-      mediaRecorder.onstart = () => {
-        btnRecord.textContent = '⏹ Detener grabación';
-        statusEl.textContent = 'Grabando... habla ahora';
-        responseEl.textContent = '';
-      };
-
-      mediaRecorder.onstop = async () => {
-        statusEl.textContent = 'Grabación detenida. Enviando audio...';
-        const mimeType = canRecordOgg ? 'audio/ogg' : 'audio/webm';
-        const audioBlob = new Blob(audioChunks, { type: mimeType });
-
-        const witResponse = await sendAudioToWit(audioBlob);
-        if (witResponse) {
-          handleWitResponse(witResponse);
-        }
-      };
-
-      mediaRecorder.start();
-
-    } catch (err) {
-      statusEl.textContent = 'Permiso de micrófono denegado o error.';
-      console.error(err);
-    }
-  });
-})();
+btn.addEventListener('click', () => {
+  btn.disabled = true;
+  startRecognition();
+});
 </script>
 
 </body>
