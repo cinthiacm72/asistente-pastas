@@ -1,6 +1,216 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Asistente Voz Pasta - Wit.ai Vanilla</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 2rem; max-width: 600px; margin: auto; }
+  button { font-size: 1.2rem; padding: 0.7rem 1.5rem; }
+  #status { margin-top: 1rem; font-weight: bold; }
+  #response { margin-top: 1rem; }
+</style>
+</head>
+<body>
+
+<h1>Asistente de Voz - Pastas</h1>
+<button id="startBtn">Iniciar conversación</button>
+
+<div id="status">Presiona "Iniciar conversación" para comenzar</div>
+<div id="response"></div>
+
+<script>
+(() => {
+  const WIT_TOKEN = 'TU_TOKEN_DE_WIT_AQUI'; // <- Pon aquí tu token
+
+  const startBtn = document.getElementById('startBtn');
+  const statusEl = document.getElementById('status');
+  const responseEl = document.getElementById('response');
+
+  // Check support
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const isSpeechRecSupported = !!SpeechRecognition;
+
+  let recognition;
+  let isListening = false;
+
+  // Función para hacer petición a Wit.ai con texto
+  async function sendTextToWit(text) {
+    statusEl.textContent = 'Enviando texto a Wit.ai...';
+
+    const url = `https://api.wit.ai/message?v=20230606&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${WIT_TOKEN}`
+      }
+    });
+
+    if (!res.ok) {
+      statusEl.textContent = 'Error al conectar con Wit.ai';
+      return null;
+    }
+    const data = await res.json();
+    return data;
+  }
+
+  // Función para hablar (Text to Speech)
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // Manejo con SpeechRecognition (Chrome, Android)
+  async function startSpeechRecognition() {
+    if (!isSpeechRecSupported) {
+      statusEl.textContent = 'SpeechRecognition no soportado en este navegador. Usando grabación de audio.';
+      startAudioRecording();
+      return;
+    }
+
+    if (isListening) {
+      recognition.stop();
+      isListening = false;
+      startBtn.textContent = 'Iniciar conversación';
+      statusEl.textContent = 'Detenido';
+      return;
+    }
+
+    recognition = new SpeechRecognition();
+    recognition.lang = 'es-ES';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      isListening = true;
+      startBtn.textContent = 'Detener escucha';
+      statusEl.textContent = 'Escuchando...';
+      responseEl.textContent = '';
+    };
+
+    recognition.onresult = async (event) => {
+      const text = event.results[0][0].transcript;
+      statusEl.textContent = `Reconocido: "${text}"`;
+      const witResponse = await sendTextToWit(text);
+      if (witResponse) handleWitResponse(witResponse);
+    };
+
+    recognition.onerror = (event) => {
+      statusEl.textContent = `Error: ${event.error}`;
+      isListening = false;
+      startBtn.textContent = 'Iniciar conversación';
+    };
+
+    recognition.onend = () => {
+      isListening = false;
+      startBtn.textContent = 'Iniciar conversación';
+      statusEl.textContent = 'Escucha finalizada';
+    };
+
+    recognition.start();
+  }
+
+  // Función para grabar audio en navegadores sin SpeechRecognition (ej: Safari iOS)
+  async function startAudioRecording() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      statusEl.textContent = 'Grabación de audio no soportada';
+      return;
+    }
+
+    statusEl.textContent = 'Grabando audio... Presiona el botón para detener';
+
+    let chunks = [];
+    let mediaRecorder;
+
+    if (startBtn.textContent === 'Detener grabación') {
+      mediaRecorder.stop();
+      startBtn.textContent = 'Iniciar conversación';
+      return;
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+
+    mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+    mediaRecorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      chunks = [];
+      statusEl.textContent = 'Enviando audio a Wit.ai...';
+
+      const arrayBuffer = await blob.arrayBuffer();
+
+      // Wit.ai API para audio (POST /speech)
+      const res = await fetch('https://api.wit.ai/speech?v=20230606', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${WIT_TOKEN}`,
+          'Content-Type': 'audio/webm'
+        },
+        body: arrayBuffer
+      });
+
+      if (!res.ok) {
+        statusEl.textContent = 'Error al enviar audio a Wit.ai';
+        return;
+      }
+      const witResponse = await res.json();
+      statusEl.textContent = `Respuesta Wit.ai: ${witResponse.text || '[sin texto]'}`;
+      if (witResponse) handleWitResponse(witResponse);
+    };
+
+    mediaRecorder.start();
+    startBtn.textContent = 'Detener grabación';
+  }
+
+  // Función para manejar respuesta de Wit.ai
+  function handleWitResponse(data) {
+    console.log('Wit.ai response:', data);
+    // Extraer texto reconocido
+    const text = data.text || '';
+    // Extraer intención (intent)
+    let intent = null;
+    if (data.intents && data.intents.length > 0) {
+      intent = data.intents[0].name;
+    }
+
+    // Mostrar texto y respuesta
+    responseEl.textContent = `Intención: ${intent || 'No detectada'}\nTexto: ${text}`;
+
+    // Respuestas básicas programadas
+    let answer = '';
+
+    if (intent === 'about_brand') {
+      answer = 'Somos una marca dedicada a las mejores pastas italianas artesanales.';
+    } else if (intent === 'get_recipe') {
+      answer = 'Aquí tienes una receta fácil: Pasta con salsa de tomate y albahaca.';
+    } else {
+      answer = 'Lo siento, no entendí tu pregunta. ¿Puedes repetir?';
+    }
+
+    responseEl.textContent += `\n\nRespuesta: ${answer}`;
+    speak(answer);
+  }
+
+  // Botón principal
+  startBtn.addEventListener('click', () => {
+    if (isSpeechRecSupported) {
+      startSpeechRecognition();
+    } else {
+      startAudioRecording();
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
+
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="es">
+<head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Asistente de Pastas</title>
@@ -20,4 +230,4 @@
 
   <script src="main.js"></script>
 </body>
-</html>
+</html> -->
