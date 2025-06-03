@@ -1,78 +1,68 @@
-const hablarBtn = document.getElementById("hablarBtn");
-const respuestaEl = document.getElementById("respuesta");
+const startBtn = document.getElementById('start-btn');
+const output = document.getElementById('output');
 
-// Inicializa reconocimiento de voz
-const reconocimiento = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-reconocimiento.lang = "es-ES";
+// 👇 Token de Wit.ai (protegido sólo en backend, pero lo usaremos aquí por simplicidad)
+const WIT_TOKEN = "Bearer 72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK"; // Reemplázalo
 
-hablarBtn.addEventListener("click", () => {
-  respuestaEl.textContent = "🎙️ Escuchando...";
-  reconocimiento.start();
-});
-
-reconocimiento.onresult = async function(event) {
-  const texto = event.results[0][0].transcript;
-  respuestaEl.textContent = `Tú dijiste: "${texto}". Pensando...`;
-  const respuesta = await obtenerRespuestaWit(texto);
-  respuestaEl.textContent = respuesta;
-  hablar(respuesta);
-};
-
-// Aquí consultamos a la API de Wit.ai
-async function obtenerRespuestaWit(texto) {
-  try {
-    const response = await fetch(`https://api.wit.ai/message?v=20250602&q=${encodeURIComponent(texto)}`, {
-      headers: {
-        Authorization: "Bearer 72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK" // Tu token
-      }
-    });
-
-    const data = await response.json();
-
-   const intent = data.intents && data.intents.length > 0 ? data.intents[0].name : null;
-
-    let tipoPasta = null;
-    if (data.entities && data.entities['tipo_pasta:tipo_pasta']) {
-      tipoPasta = data.entities['tipo_pasta:tipo_pasta'][0].value.toLowerCase();
+// 🧠 Habla con Wit.ai
+async function sendToWitAI(message) {
+  const res = await fetch('https://api.wit.ai/message?v=20230603&q=' + encodeURIComponent(message), {
+    headers: {
+      Authorization: WIT_TOKEN
     }
+  });
+  const data = await res.json();
+  return data;
+}
 
-    if (intent === 'saludo') {
-      return "¡Hola! 👋 Soy tu asistente de pastas italianas. ¿En qué puedo ayudarte?";
-    }
-    if (intent === 'consultar_producto') {
-      if (tipoPasta === 'sin gluten') {
-        return "Tenemos fusilli, spaghetti y penne sin gluten 🍝";
-      }
-      if (tipoPasta === 'integral') {
-        return "Contamos con pastas integrales 100% de trigo: spaghetti, penne y rigatoni 🍃";
-      }
-      return "Ofrecemos spaghetti, fusilli, penne, tagliatelle y más. ¿Quieres saber sobre alguna pasta en especial?";
-    }
-    if (intent === 'sugerir_receta') {
-      if (tipoPasta === 'spaghetti') {
-        return "Te recomiendo Spaghetti alla Carbonara 🥓🧀. ¿Quieres los pasos?";
-      }
-      if (tipoPasta === 'fusilli') {
-        return "Prueba una receta con pesto genovés 🌿 y tomates cherry 🍅. ¡Rápida y deliciosa!";
-      }
-      return "Puedes preparar Pasta alla Norma 🍆🍝 o Penne all’Arrabbiata 🌶️. ¿Quieres la receta?";
-    }
-
-    // Respuesta por defecto
-    return "Lo siento, no entendí eso. ¿Puedes repetirlo?";
-
-  } catch (error) {
-    console.error("Error al obtener respuesta:", error);
-    return "Error de conexión con Wit.ai.";
+// 💬 Decidir respuesta según intent
+function getResponse(intentName) {
+  switch (intentName) {
+    case "saludo":
+      return "¡Hola! ¿Cómo puedo ayudarte?";
+    case "productos":
+      return "Tenemos fusilli, penne y spaghetti.";
+    case "recetas":
+      return "Claro, dime qué ingredientes tienes.";
+    default:
+      return "No entendí bien eso. ¿Puedes repetirlo?";
   }
 }
 
-// Función para que el navegador lea la respuesta
-function hablar(texto) {
-  if (!('speechSynthesis' in window)) return;
+// 🎙️ Escucha voz del usuario
+function startRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    output.textContent = "Tu navegador no soporta reconocimiento de voz.";
+    return;
+  }
 
-  const utterance = new SpeechSynthesisUtterance(texto);
-  utterance.lang = 'es-ES';
-  window.speechSynthesis.speak(utterance);
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'es-ES';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
 
+  output.textContent = "Escuchando...";
+
+  recognition.onresult = async (event) => {
+    const userSpeech = event.results[0][0].transcript;
+    output.textContent = `Tú: ${userSpeech}`;
+
+    const witData = await sendToWitAI(userSpeech);
+    const intent = witData.intents?.[0]?.name || null;
+    const response = getResponse(intent);
+
+    // Agrega respuesta del bot
+    const reply = document.createElement('p');
+    reply.textContent = "Asistente: " + response;
+    output.appendChild(reply);
+  };
+
+  recognition.onerror = (event) => {
+    output.textContent = "Error al reconocer voz: " + event.error;
+  };
+
+  recognition.start();
 }
+
+startBtn.addEventListener('click', startRecognition);
