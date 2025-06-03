@@ -1,14 +1,16 @@
 const startBtn = document.getElementById("start-btn");
 const output = document.getElementById("output");
 
-// 👉 Función para hablar (compatible con iPhone y Android)
+window.addEventListener('touchstart', () => {
+  speechSynthesis.getVoices();
+}, { once: true });
+
 function speak(text) {
   if (!text) return;
 
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "es-ES";
 
-  // Forzar voz en español
   const voices = speechSynthesis.getVoices();
   const spanishVoice = voices.find(voice => voice.lang.startsWith('es'));
   if (spanishVoice) utterance.voice = spanishVoice;
@@ -16,26 +18,17 @@ function speak(text) {
   speechSynthesis.speak(utterance);
 }
 
-// 👉 Función para obtener respuesta según palabras clave
 function getResponse(text) {
   const lower = text.toLowerCase();
+  console.log("Usuario dijo:", lower);
 
-  if (lower.includes("hola") || lower.includes("buenos días")) {
-    return "¡Hola! ¿Cómo puedo ayudarte?";
-  }
-
-  if (lower.includes("producto") || lower.includes("pastas")) {
-    return "Tenemos fusilli, penne y spaghetti.";
-  }
-
-  if (lower.includes("receta") || lower.includes("ingrediente")) {
-    return "Claro, dime qué ingredientes tienes.";
-  }
-
+  if (lower.includes("hola")) return "¡Hola! ¿Cómo puedo ayudarte?";
+  if (lower.includes("producto") || lower.includes("pastas")) return "Tenemos fusilli, penne y spaghetti.";
+  if (lower.includes("receta") || lower.includes("ingrediente")) return "Claro, dime qué ingredientes tienes.";
+  
   return "No entendí bien eso. ¿Puedes repetirlo?";
 }
 
-// 👉 Reconocimiento de voz (solo texto, sin enviar a servidores)
 function startRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -52,6 +45,8 @@ function startRecognition() {
 
   recognition.onresult = (event) => {
     const transcript = event.results[0][0].transcript;
+    console.log("Transcripción:", transcript);
+
     const userP = document.createElement("p");
     userP.textContent = "Tú: " + transcript;
     output.appendChild(userP);
@@ -69,18 +64,13 @@ function startRecognition() {
     const errP = document.createElement("p");
     errP.textContent = "❌ Error: " + event.error;
     output.appendChild(errP);
+    console.error("Error en reconocimiento:", event.error);
   };
 
   recognition.start();
 }
 
 startBtn.addEventListener("click", () => {
-  // Detener cualquier voz anterior
   speechSynthesis.cancel();
   startRecognition();
 });
-
-// Forzar carga de voces (recomendado en iOS)
-speechSynthesis.onvoiceschanged = () => {
-  speechSynthesis.getVoices();
-};
