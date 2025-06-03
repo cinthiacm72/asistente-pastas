@@ -1,76 +1,85 @@
 const startBtn = document.getElementById("start-btn");
 const output = document.getElementById("output");
 
-window.addEventListener('touchstart', () => {
-  speechSynthesis.getVoices();
-}, { once: true });
+// 👉 Reemplaza con tu token de Wit.ai
+const WIT_TOKEN = "Bearer 72OKU3ULAQHNR3CMRMQ5DVQGKNIUG7LK";
 
+// 🗣️ Reproducir respuesta
 function speak(text) {
-  if (!text) return;
-
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "es-ES";
-
   const voices = speechSynthesis.getVoices();
-  const spanishVoice = voices.find(voice => voice.lang.startsWith('es'));
+  const spanishVoice = voices.find(v => v.lang.startsWith("es"));
   if (spanishVoice) utterance.voice = spanishVoice;
-
   speechSynthesis.speak(utterance);
 }
 
+// 🤖 Obtener respuesta según intent
 function getResponse(text) {
-  const lower = text.toLowerCase();
-  console.log("Usuario dijo:", lower);
-
-  if (lower.includes("hola")) return "¡Hola! ¿Cómo puedo ayudarte?";
-  if (lower.includes("producto") || lower.includes("pastas")) return "Tenemos fusilli, penne y spaghetti.";
-  if (lower.includes("receta") || lower.includes("ingrediente")) return "Claro, dime qué ingredientes tienes.";
-  
+  const t = text.toLowerCase();
+  if (t.includes("hola")) return "¡Hola! ¿Cómo puedo ayudarte?";
+  if (t.includes("producto") || t.includes("pastas")) return "Tenemos fusilli, penne y spaghetti.";
+  if (t.includes("receta") || t.includes("ingrediente")) return "Claro, dime qué ingredientes tienes.";
   return "No entendí bien eso. ¿Puedes repetirlo?";
 }
 
-function startRecognition() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    output.textContent = "Tu navegador no soporta reconocimiento de voz.";
-    return;
-  }
+// 🎙️ Grabar y enviar a Wit.ai
+async function recordAndSend() {
+  output.innerHTML = "🎤 Grabando...";
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const recorder = new MediaRecorder(stream);
+  const chunks = [];
 
-  const recognition = new SpeechRecognition();
-  recognition.lang = "es-ES";
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
+  recorder.ondataavailable = e => chunks.push(e.data);
 
-  output.textContent = "🎤 Escuchando...";
+  recorder.onstop = async () => {
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const formData = new FormData();
+    formData.append("file", blob, "audio.webm");
 
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    console.log("Transcripción:", transcript);
+    output.innerHTML = "⏳ Analizando...";
 
-    const userP = document.createElement("p");
-    userP.textContent = "Tú: " + transcript;
-    output.appendChild(userP);
+    const response = await fetch("https://api.wit.ai/speech?v=20230603", {
+      method: "POST",
+      headers: {
+        Authorization: WIT_TOKEN,
+        "Content-Type": "audio/webm"
+      },
+      body: blob
+    });
 
-    const response = getResponse(transcript);
+    const data = await response.json();
+    const text = data.text;
 
-    const botP = document.createElement("p");
-    botP.textContent = "Asistente: " + response;
-    output.appendChild(botP);
+    if (!text) {
+      output.innerHTML = "<p>😕 No se pudo entender.</p>";
+      speak("No entendí bien eso. ¿Puedes repetirlo?");
+      return;
+    }
 
-    speak(response);
+    const reply = getResponse(text);
+
+    output.innerHTML = `
+      <p><strong>Tú:</strong> ${text}</p>
+      <p><strong>Asistente:</strong> ${reply}</p>
+    `;
+
+    speak(reply);
   };
 
-  recognition.onerror = (event) => {
-    const errP = document.createElement("p");
-    errP.textContent = "❌ Error: " + event.error;
-    output.appendChild(errP);
-    console.error("Error en reconocimiento:", event.error);
-  };
+  recorder.start();
 
-  recognition.start();
+  setTimeout(() => {
+    recorder.stop();
+    stream.getTracks().forEach(track => track.stop());
+  }, 4000); // 4 segundos de grabación
 }
 
-startBtn.addEventListener("click", () => {
-  speechSynthesis.cancel();
-  startRecognition();
+startBtn.addEventListener("click", async () => {
+  try {
+    await recordAndSend();
+  } catch (err) {
+    output.innerHTML = "<p>🚫 Error: " + err.message + "</p>";
+    console.error(err);
+  }
 });
